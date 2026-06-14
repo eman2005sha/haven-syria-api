@@ -29,6 +29,10 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
     Route::post('/properties', [PropertyController::class, 'store']);//اضافة عقار
     Route::put('/properties/{id}', [PropertyController::class, 'update']);   // تعديل
     Route::delete('/properties/{id}', [PropertyController::class, 'destroy']); // حذف
+  //  لوحة تحكم مراجعة العقارات (خاصة فقط بالآدمن والشريك)
+    Route::get('/properties/pending-requests', [PropertyController::class, 'getPendingRequests']);//عرض الطلبات المعلقة
+    Route::put('/properties/{id}/review', [PropertyController::class, 'reviewRequest']);//مراجعة الطلب(قبول-رفض)
+  
     // 2. روابط التحكم بالمكاتب الشريكة (محمية بالتوكن + شرط صلاحية الآدمن السوبر فقط!)
     Route::middleware('role:admin')->group(function () {
         Route::post('/offices', [RealEstateOfficeController::class, 'store']); // إضافة مكتب شريك

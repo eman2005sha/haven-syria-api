@@ -11,15 +11,13 @@ use Illuminate\Support\Facades\Storage;
 
 class PropertyController extends Controller
 {
-    
-// تابع إرسال طلب إضافة عقار (متاح لـ صاحب العقار، الشريك، والآدمن)
+    // 1. تابع إضافة عقار جديد
     public function store(Request $request)
     {
-        // 1. التحقق من المدخلات بناءً على الـ Migration والـ Enums تبعك بالظبط
         $validator = Validator::make($request->all(), [
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'price_sp' => 'required_without:price_usd|numeric|min:0|nullable', // يجب إدخال سعر واحد على الأقل
+            'price_sp' => 'required_without:price_usd|numeric|min:0|nullable', 
             'price_usd' => 'required_without:price_sp|numeric|min:0|nullable',           
             'region' => 'required|string|max:255',
             'property_type' => 'required|in:apartment,villa,land,farm,shop,office',
@@ -31,19 +29,28 @@ class PropertyController extends Controller
             'floor_number' => 'required|integer',
             'address_details' => 'nullable|string',
             'location_gps' => 'nullable|string',
-            'office_id' => 'required|exists:real_estate_offices,id', // المكتب العقاري الموجه له الطلب
-            'images' => 'required|array|min:1', // يجب رفع صورة واحدة على الأقل
-            'images.*' => 'image|mimes:png,jpg,jpeg|max:2048', // شروط كل صورة (الامتداد والحجم)
+            'office_id' => 'required|exists:real_estate_offices,id', 
+            'images' => 'required|array|min:1', 
+            'images.*' => 'image|mimes:png,jpg,jpeg|max:2048', 
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
-        // تحديد حالة القبول تلقائياً حسب صلاحية الشخص اللي عم يرفع
-        $userRole = $request->user()->role;
-        $approvalStatus = ($userRole === 'admin' || $userRole === 'partner') ? 'accepted' : 'pending';
-        // 2. كرتنة (إنشاء) العقار بقلب الداتابيز
-        // الـ approval_status تلقائياً بياخد pending من الداتابيز، والـ status بياخد available
+
+        $user = $request->user();
+        
+        // 🕵️‍♂️ جلب المكتب الذي يديره المستخدم الحالي (آدمن أو شريك)
+        $myOffice = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
+
+        // الحالة الافتراضية لأي مستخدم أو صاحب عقار عادي هي قيد الانتظار
+        $approvalStatus = 'pending';
+
+        // 🌟 الشرط الذكي: إذا كان المستخدم (آدمن أو شريك) وعم يرفع العقار "لمكتبه هو بالذات"، بياخد مقبول فوراً
+        if (in_array($user->role, ['admin', 'partner']) && $myOffice && $myOffice->id == $request->office_id) {
+            $approvalStatus = 'accepted';
+        }
+
         $property = Property::create([
             'title' => $request->title,
             'description' => $request->description,
@@ -59,18 +66,14 @@ class PropertyController extends Controller
             'floor_number' => $request->floor_number,
             'address_details' => $request->address_details,
             'location_gps' => $request->location_gps,
-            'owner_id' => $request->user()->id, // أخذ ID المستخدم الحالي أوتوماتيكياً من التوكن
+            'owner_id' => $user->id, 
             'office_id' => $request->office_id,
             'approval_status' => $approvalStatus, 
         ]);
 
-        // 3. الـ Logic السحري لرفع الصور المتعددة وتخزينها
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $image) {
-                // تخزين الصورة بداخل مجلد public/properties وتوليد اسم عشوائي آمن لها
                 $path = $image->store('properties', 'public');
-
-                // حفظ مسار الصورة بجدول الـ property_images وربطها بـ ID العقار الحالي
                 PropertyImage::create([
                     'property_id' => $property->id,
                     'image_path' => $path,
@@ -78,21 +81,16 @@ class PropertyController extends Controller
             }
         }
 
-        // 4. تحميل علاقة الصور مع الرد عشان تظهر بالبوستمان فوراً
         $property->load('images');
+        
         $message = ($approvalStatus === 'accepted') 
-            ? 'تم إضافة العقار ونشره في النظام بنجاح .' 
+            ? 'تم إضافة العقار ونشره في مكتبك بنجاح تلقائي.' 
             : 'تم إرسال طلب إضافة العقار بنجاح وهو قيد المراجعة الآن من قبل المكتب المختار.';
 
-        return response()->json([
-            'message' => $message,
-            'property' => $property
-        ], 201);
-
+        return response()->json(['message' => $message, 'property' => $property], 201);
     }
 
-
-// 1. تابع تعديل العقار الخاص بالمستخدم (متاح فقط للآدمن والبارتنر على عقاراتهم الشخصية)
+    // 2. تابع تعديل العقار
     public function update(Request $request, $id)
     {
         $property = Property::find($id);
@@ -103,16 +101,21 @@ class PropertyController extends Controller
 
         $user = $request->user();
 
-        // 🔒 فحص الصلاحية والخصوصية: يجب أن يكون المستخدم (آدمن أو بارتنر) وهو "صاحب العقار نفسه" الذي رفعه
         if (!in_array($user->role, ['admin', 'partner'])) {
             return response()->json(['message' => 'عذراً! هذه الصلاحية متاحة فقط لإدارة النظام والشركاء.'], 403);
         }
 
-        if ($property->owner_id !== $user->id) {
-            return response()->json(['message' => 'عذراً! لا يمكنك تعديل هذا العقار لأنه تابع لمستخدم أو شريك آخر (قيد الخصوصية).'], 403);
+        // جلب المكتب الذي يديره المستخدم الحالي
+        $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
+
+        // 🔒 قفل الأمان والخصوصية الجديد حسب طلبك:
+        $isOwner = ($property->owner_id === $user->id); // هل هو صاحب العقار؟
+        $isOfficeManagerAndAccepted = ($office && $property->office_id === $office->id && $property->approval_status === 'accepted'); // هل هو مدير المكتب والعقار مقبول؟
+
+        if (!$isOwner && !$isOfficeManagerAndAccepted) {
+            return response()->json(['message' => 'عذراً! لا يمكنك تعديل هذا العقار إلا إذا كنت صاحبه أو أنه معروض ومقبول في مكتبك.'], 403);
         }
 
-        // التحقق من المدخلات
         $validator = Validator::make($request->all(), [
             'title' => 'sometimes|string|max:255',
             'description' => 'nullable|string',
@@ -128,14 +131,13 @@ class PropertyController extends Controller
             'floor_number' => 'sometimes|integer',
             'address_details' => 'nullable|string',
             'location_gps' => 'nullable|string',
-            'status' => 'sometimes|in:available,sold,rented', // تحديث حالة العقار في السوق
+            'status' => 'sometimes|in:available,sold,rented', 
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // تحديث البيانات
         $property->update($request->only([
             'title', 'description', 'price_sp', 'price_usd', 'region', 
             'property_type', 'offer_type', 'rent_period', 'is_furnished', 
@@ -143,12 +145,12 @@ class PropertyController extends Controller
         ]));
 
         return response()->json([
-            'message' => 'تم تحديث بيانات عقارك الخاص بنجاح.',
+            'message' => 'تم تحديث بيانات العقار بنجاح.',
             'property' => $property->load('images')
         ], 200);
     }
 
-    // 2. تابع حذف العقار الشخصي مع صوره (متاح فقط للآدمن والبارتنر على عقاراتهم الشخصية)
+    // 3. تابع حذف العقار
     public function destroy(Request $request, $id)
     {
         $property = Property::with('images')->find($id);
@@ -159,30 +161,95 @@ class PropertyController extends Controller
 
         $user = $request->user();
 
-        // 🔒 فحص الصلاحية والخصوصية التامة للحذف
         if (!in_array($user->role, ['admin', 'partner'])) {
             return response()->json(['message' => 'عذراً! هذه الصلاحية متاحة فقط لإدارة النظام والشركاء.'], 403);
         }
 
-        if ($property->owner_id !== $user->id) {
-            return response()->json(['message' => 'عذراً! لا يمكنك حذف هذا العقار لأنه تابع لمستخدم أو شريك آخر.'], 403);
+        $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
+
+        // 🔒 قفل الحذف حسب فكرتك بالظبط:
+        $isOwner = ($property->owner_id === $user->id); // حذف عقاره الشخصي
+        $isOfficeManagerAndAccepted = ($office && $property->office_id === $office->id && $property->approval_status === 'accepted'); // حذف عقار وافق عليه بمكتبه
+
+        if (!$isOwner && !$isOfficeManagerAndAccepted) {
+            return response()->json(['message' => 'عذراً! لا يمكنك حذف هذا العقار إلا إذا كنت صاحبه أو قمت بقبوله مسبقاً في مكتبك.'], 403);
         }
 
-        // مسح ملفات الصور حقيقةً من الـ Storage
+        // حذف الصور حقيقة من السيرفر
         foreach ($property->images as $image) {
             if (Storage::disk('public')->exists($image->image_path)) {
                 Storage::disk('public')->delete($image->image_path);
             }
         }
 
-        // حذف العقار من قاعدة البيانات
         $property->delete();
 
-        return response()->json([
-            'message' => 'تم حذف عقارك الخاص وكافة صوره من النظام بنجاح.'
-        ], 200);
+        return response()->json(['message' => 'تم حذف العقار وكافة صوره من النظام بنجاح.'], 200);
     }
 
+    // 4. تابع جلب الطلبات المعلقة لمكتب المستخدم الحالي
+    public function getPendingRequests(Request $request)
+    {
+        $user = $request->user();
+
+        if (!in_array($user->role, ['admin', 'partner'])) {
+            return response()->json(['message' => 'عذراً! هذه الصلاحية غير متاحة لك.'], 403);
+        }
+
+        $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
+
+        if (!$office) {
+            return response()->json(['message' => 'عذراً! حسابك غير مرتبط بإدارة أي مكتب عقاري حالياً.'], 404);
+        }
+
+        $pendingProperties = Property::with(['images', 'owner'])
+            ->where('approval_status', 'pending')
+            ->where('office_id', $office->id) 
+            ->latest()
+            ->get();
+
+        return response()->json(['properties' => $pendingProperties], 200);
     }
 
+    // 5. تابع مراجعة الطلب (قبول أو رفض)
+    public function reviewRequest(Request $request, $id)
+    {
+        $user = $request->user();
 
+        if (!in_array($user->role, ['admin', 'partner'])) {
+            return response()->json(['message' => 'عذراً! هذه الصلاحية غير متاحة لك.'], 403);
+        }
+
+        $property = Property::find($id);
+
+        if (!$property) {
+            return response()->json(['message' => 'العقار غير موجود'], 404);
+        }
+
+        $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
+
+        if (!$office || $property->office_id !== $office->id) {
+            return response()->json(['message' => 'عذراً! لا يمكنك مراجعة هذا العقار لأنه موجه لمكتب عقاري آخر.'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'approval_status' => 'required|in:accepted,rejected',
+            'rejection_reason' => 'required_if:approval_status,rejected|string|nullable|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $property->update([
+            'approval_status' => $request->approval_status,
+            'rejection_reason' => $request->approval_status === 'rejected' ? $request->rejection_reason : null,
+        ]);
+
+        $message = $request->approval_status === 'accepted' 
+            ? 'تم قبول العقار بنجاح ونشره في النظام.' 
+            : 'تم رفض العقار وتسجيل سبب الرفض بنجاح.';
+
+        return response()->json(['message' => $message, 'property' => $property->load('images')], 200);
+    }
+}
