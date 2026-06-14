@@ -18,7 +18,7 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
 
 
-// روابط محمية (لازم يكون مع اليوزر Token بالـ Header وإلا بيرفضه السيرفر)
+    // روابط محمية (لازم يكون مع اليوزر Token بالـ Header وإلا بيرفضه السيرفر)
     Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     // روابط البروفايل   
@@ -26,12 +26,17 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);    // تعديل البروفايل (استخدمنا PUT للتحديث)
     //  عرض المكاتب الشريكة متاح لجميع المستخدمين المسجلين بالنظام
     Route::get('/offices', [RealEstateOfficeController::class, 'index']);
+
+   //  لوحة تحكم مراجعة العقارات (خاصة فقط بالآدمن والشريك)
+    Route::get('/properties/pending-requests', [PropertyController::class, 'getPendingRequests']);//عرض الطلبات المعلقة
+    Route::put('/properties/{id}/review', [PropertyController::class, 'reviewRequest']);//مراجعة الطلب(قبول-رفض)
+    
+    Route::middleware('role:admin,partner,owner')->group(function () {
     Route::post('/properties', [PropertyController::class, 'store']);//اضافة عقار
     Route::put('/properties/{id}', [PropertyController::class, 'update']);   // تعديل
     Route::delete('/properties/{id}', [PropertyController::class, 'destroy']); // حذف
-  //  لوحة تحكم مراجعة العقارات (خاصة فقط بالآدمن والشريك)
-    Route::get('/properties/pending-requests', [PropertyController::class, 'getPendingRequests']);//عرض الطلبات المعلقة
-    Route::put('/properties/{id}/review', [PropertyController::class, 'reviewRequest']);//مراجعة الطلب(قبول-رفض)
+ 
+  });
   
     // 2. روابط التحكم بالمكاتب الشريكة (محمية بالتوكن + شرط صلاحية الآدمن السوبر فقط!)
     Route::middleware('role:admin')->group(function () {
