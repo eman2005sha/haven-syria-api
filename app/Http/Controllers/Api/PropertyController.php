@@ -8,7 +8,7 @@ use App\Models\PropertyImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
-
+use App\Notifications\PropertyRequestStatusNotification;
 class PropertyController extends Controller
 {
     // 1. تابع إضافة عقار جديد
@@ -246,10 +246,59 @@ class PropertyController extends Controller
             'rejection_reason' => $request->approval_status === 'rejected' ? $request->rejection_reason : null,
         ]);
 
+        
+
+// 🔔 إرسال إشعار لصاحب العقار
+$property->owner->notify(new PropertyRequestStatusNotification($property));
+
+
         $message = $request->approval_status === 'accepted' 
             ? 'تم قبول العقار بنجاح ونشره في النظام.' 
             : 'تم رفض العقار وتسجيل سبب الرفض بنجاح.';
 
         return response()->json(['message' => $message, 'property' => $property->load('images')], 200);
     }
+
+
+
+    // تابع يتيح لمالك العقار رؤية عقاراته الشخصية فقط لمتابعة حالتها (pending, accepted, rejected)
+public function getMyProperties(Request $request)
+{
+    $user = $request->user();
+
+    // جلب العقارات التي يملكها هذا المستخدم الحالي بالظبط مع صورها
+    $myProperties = Property::with('images')
+        ->where('owner_id', $user->id)
+        ->latest()
+        ->get();
+
+    return response()->json([
+        'message' => 'تم جلب عقاراتك الشخصية بنجاح.',
+        'properties' => $myProperties
+    ], 200);
+}
+
+    
+//تابع تحديث حالة العقار متاح/ مؤجر /مباع   متاح للمدير وللبارتنر
+     public function updateStatus(Request $request, $id)
+    {
+        $property = Property::findOrFail($id);
+          if (!$property) {
+            return response()->json([
+                'success' => false,
+                'message' => 'العقار غير موجود'
+            ], 404);
+        }
+        $request->validate(['status' => 'required|in:available,sold,rented']);
+        $property->update(['status' => $request->status]);
+       return response()->json([
+            'success' => true,
+            'data' => $property,
+            'message' => 'تم تحديث حالة العقار بنجاح'
+        ], 200);
+    }
+
+  
+
+
 }

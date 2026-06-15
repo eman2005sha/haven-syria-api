@@ -42,4 +42,10 @@ use HasApiTokens, HasFactory, Notifiable;
             'password' => 'hashed',
         ];
     }
+
+    
+public function routeNotificationForFirebase()
+{
+    return $this->fcm_token;
+}
 }
