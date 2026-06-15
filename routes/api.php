@@ -28,6 +28,7 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);    // تعديل البروفايل (استخدمنا PUT للتحديث)
     //  عرض المكاتب الشريكة متاح لجميع المستخدمين المسجلين بالنظام
     Route::get('/offices', [RealEstateOfficeController::class, 'index']);
+<<<<<<< HEAD
     //عرض إعدادات النظام متاح لجميع المستخدمين المسجلين بالنظام ي
     Route::get('settings', [SettingController::class, 'index']);
  
@@ -39,10 +40,18 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
     Route::post('settings', [SettingController::class, 'update']);//تحديث إعدادات النظام
 
      
+=======
+
+   //  لوحة تحكم مراجعة العقارات (خاصة فقط بالآدمن والشريك)
+    Route::get('/properties/pending-requests', [PropertyController::class, 'getPendingRequests']);//عرض الطلبات المعلقة
+    Route::put('/properties/{id}/review', [PropertyController::class, 'reviewRequest']);//مراجعة الطلب(قبول-رفض)
+    
+>>>>>>> 8d0cfe5eff6f0d9272b4b23f634d976294b91cdb
     Route::middleware('role:admin,partner,owner')->group(function () {
     Route::post('/properties', [PropertyController::class, 'store']);//اضافة عقار
     Route::put('/properties/{id}', [PropertyController::class, 'update']);   // تعديل
     Route::delete('/properties/{id}', [PropertyController::class, 'destroy']); // حذف
+<<<<<<< HEAD
     Route::get('/getproperties', [PropertyController::class, 'getMyProperties']);//عرض عقارات الشخصية لصاحب العقار لمتابعة حالاتها
     // Route::post('/user/fcm-token', [UserController::class, 'updateFcmToken']);//لحفظ Fcm Token
    Route::get('/notifications', [OwnerNotificationController::class, 'index']);//جلب جميع الإشعارات لصاحب العقار(إشعارات تحديث حالة الطلب )
@@ -50,6 +59,10 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
     Route::put('/notifications/read-all', [OwnerNotificationController::class, 'markAllAsRead']); // تحديث الكل كمقروء
     
     });
+=======
+ 
+  });
+>>>>>>> 8d0cfe5eff6f0d9272b4b23f634d976294b91cdb
   
     // 2. روابط التحكم بالمكاتب الشريكة (محمية بالتوكن + شرط صلاحية الآدمن السوبر فقط!)
     Route::middleware('role:admin')->group(function () {
