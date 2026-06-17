@@ -8,6 +8,7 @@ use App\Models\PropertyImage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use App\Notifications\PropertyRequestStatusNotification;
 class PropertyController extends Controller
 {
@@ -280,23 +281,54 @@ public function getMyProperties(Request $request)
 
     
 //تابع تحديث حالة العقار متاح/ مؤجر /مباع   متاح للمدير وللبارتنر
-     public function updateStatus(Request $request, $id)
-    {
-        $property = Property::findOrFail($id);
-          if (!$property) {
-            return response()->json([
-                'success' => false,
-                'message' => 'العقار غير موجود'
-            ], 404);
-        }
-        $request->validate(['status' => 'required|in:available,sold,rented']);
-        $property->update(['status' => $request->status]);
-       return response()->json([
-            'success' => true,
-            'data' => $property,
-            'message' => 'تم تحديث حالة العقار بنجاح'
-        ], 200);
+    
+public function updateStatus(Request $request, $id)
+{
+    $user = $request->user();
+
+    // 1. فحص الصلاحية: التأكد أن المستخدم إما admin أو partner
+    if (!in_array($user->role, ['admin', 'partner'])) {
+        return response()->json([
+            'success' => false,
+            'message' => 'عذراً! هذه الصلاحية متاح فقط للمديرين والشركاء.'
+        ], 403);
     }
+
+    // 2. جلب العقار (استخدمنا find لحتى نتحكم بالـ 404 بنفسنا وبشكل أنيق)
+    $property = Property::find($id);
+    if (!$property) {
+        return response()->json([
+            'success' => false,
+            'message' => 'العقار غير موجود'
+        ], 404);
+    }
+
+    // 3. فحص الملكية: التأكد أن البارتنر/الآدمن يدير المكتب المسؤول عن هذا العقار
+    $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
+
+    if (!$office || $property->office_id !== $office->id) {
+        return response()->json([
+            'success' => false,
+            'message' => 'عذراً! لا يمكنك تحديث حالة هذا العقار لأنه تابع لمكتب عقاري آخر أو لست مديراً له.'
+        ], 403);
+    }
+
+    // 4. التحقق من المدخلات
+    $request->validate([
+        'status' => 'required|in:available,sold,rented'
+    ]);
+
+    // 5. التحديث والحفظ
+    $property->update([
+        'status' => $request->status
+    ]);
+
+    return response()->json([
+        'success' => true,
+        'data' => $property->load('images'), // تحميل الصور ليظهر العقار كامل بالـ Frontend
+        'message' => 'تم تحديث حالة العقار بنجاح'
+    ], 200);
+}
 
   
 

@@ -17,6 +17,10 @@ return new class extends Migration
     $table->foreignId('property_id')->constrained('properties')->onDelete('cascade'); // العقار المحفوظ
     
             $table->timestamps();
+
+            
+            // منع تكرار الحفظ لنفس المستخدم والعقار
+            $table->unique(['user_id', 'property_id']);
         });
     }
 

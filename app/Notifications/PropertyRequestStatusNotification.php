@@ -35,7 +35,7 @@ class PropertyRequestStatusNotification extends Notification
         $propertyTitle = $this->property->title ?? 'العقار';
 
         $message = match ($this->property->approval_status) {
-            'approved' => "✅ تم قبول طلب إضافة {$propertyTitle}. عقارك الآن مرئي.",
+            'accepted' => "✅ تم قبول طلب إضافة {$propertyTitle}. عقارك الآن مرئي.",
             'rejected' => "❌ تم رفض طلب إضافة {$propertyTitle}.\nالسبب: {$this->property->rejection_reason}",
             'pending'  => "📋 تم استلام طلب إضافة {$propertyTitle} وهو قيد المراجعة.",
             default    => "تم تحديث حالة طلب {$propertyTitle}",
@@ -46,7 +46,6 @@ class PropertyRequestStatusNotification extends Notification
             'message'          => $message,
             'property_id'      => $this->property->id,
             'status'           => $this->property->approval_status,
-            'status_text'      => $this->getStatusText(),
             'property_title'   => $propertyTitle,
             'rejection_reason' => $this->property->rejection_reason,
             'type'             => 'property_request_status',

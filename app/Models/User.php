@@ -44,8 +44,15 @@ use HasApiTokens, HasFactory, Notifiable;
     }
 
     
-public function routeNotificationForFirebase()
-{
-    return $this->fcm_token;
-}
+    public function favorites()
+    {
+        return $this->hasMany(Favorite::class);
+    }
+    
+     // العقارات المحفوظة
+     
+    public function favoriteProperties()
+    {
+        return $this->belongsToMany(Property::class, 'favorites');
+    }
 }
