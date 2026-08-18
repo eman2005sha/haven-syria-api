@@ -76,6 +76,12 @@ class AuthController extends Controller
                 'message' => 'بيانات الاعتماد غير صحيحة، تأكد من الإيميل أو الباسورد'
             ], 401);
         }
+        // 2. الشرط الإضافي المهم: منع الدخول إذا لم يتم تأكيد الحساب بالـ OTP
+        if (is_null($user->email_verified_at)) {
+            return response()->json([
+                'message' => 'يرجى تأكيد حسابك عبر أدخال رمز التحقق (OTP) المرتقب ببريدك الإلكتروني أولاً.'
+            ], 403);
+        }
 
         // 2. الشرط الإضافي المهم: منع الدخول إذا لم يتم تأكيد الحساب بالـ OTP
         if (is_null($user->email_verified_at)) {
