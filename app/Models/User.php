@@ -21,7 +21,8 @@ use HasApiTokens, HasFactory, Notifiable;
         'phone_number',
         'role',
         'password',
-    ];     
+        'is_active',
+    ];
    protected $hidden = [
         'password',
         'remember_token',
@@ -40,7 +41,14 @@ use HasApiTokens, HasFactory, Notifiable;
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
         ];
+    }
+
+    // المكتب الذي يديره هذا المستخدم (إن وُجد) — لعرضه بجدول إدارة المستخدمين
+    public function managedOffice()
+    {
+        return $this->hasOne(RealEstateOffice::class, 'manager_id');
     }
 
     

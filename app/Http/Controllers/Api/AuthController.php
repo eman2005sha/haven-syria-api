@@ -77,6 +77,20 @@ class AuthController extends Controller
             ], 401);
         }
 
+        // 2. الشرط الإضافي المهم: منع الدخول إذا لم يتم تأكيد الحساب بالـ OTP
+        if (is_null($user->email_verified_at)) {
+            return response()->json([
+                'message' => 'يرجى تأكيد حسابك عبر أدخال رمز التحقق (OTP) المرتقب ببريدك الإلكتروني أولاً.'
+            ], 403);
+        }
+
+        
+        if (!$user->is_active) {
+            return response()->json([
+                'message' => 'تم تعطيل هذا الحساب من قبل إدارة النظام، يرجى التواصل مع الدعم'
+            ], 403);
+        }
+
         // توليد توكن جديد له بـ عملية الدخول
         $token = $user->createToken('auth_token')->plainTextToken;
 

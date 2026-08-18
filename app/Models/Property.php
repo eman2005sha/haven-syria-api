@@ -35,6 +35,8 @@ class Property extends Model
         'area' => 'integer',
         'rooms_count' => 'integer',
         'floor_number' => 'integer',
+        'owner_id' => 'integer',
+        'office_id' => 'integer',
     ];
     // علاقة العقار مع الصور (العقار الواحد له عدة صور)
     public function images()

@@ -1,17 +1,13 @@
 <?php
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\RealEstateOfficeController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\PropertyController;
 use App\Http\Controllers\Api\SettingController;
-use App\Http\Controllers\UserController;
 use App\Http\Controllers\Api\OwnerNotificationController;
 use App\Http\Controllers\Api\PublicPropertyController;
 use App\Http\Controllers\Api\FavorityController;
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+use App\Http\Controllers\Api\UserController;
 
 // روابط عامة ما بتحتاج توكن (متاحة للكل)
 Route::post('/register', [AuthController::class, 'register']);
@@ -55,13 +51,24 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
    Route::get('/notifications', [OwnerNotificationController::class, 'index']);//جلب جميع الإشعارات لصاحب العقار(إشعارات تحديث حالة الطلب )
     Route::put('/notifications/{notificationId}/read', [OwnerNotificationController::class, 'markAsRead']);// تحديث إشعار كمقروء
     Route::put('/notifications/read-all', [OwnerNotificationController::class, 'markAllAsRead']); // تحديث الكل كمقروء
-    
+
     });
-  
+
+    // عرض العقارات حسب نطاق الصلاحية: الآدمن يرى كل عقارات النظام، الشريك يرى عقارات مكتبه فقط
+    Route::middleware('role:admin,partner')->group(function () {
+    Route::get('/properties', [PropertyController::class, 'index']);
+    });
+
     // 2. روابط التحكم بالمكاتب الشريكة (محمية بالتوكن + شرط صلاحية الآدمن السوبر فقط!)
     Route::middleware('role:admin')->group(function () {
     Route::post('/offices', [RealEstateOfficeController::class, 'store']); // إضافة مكتب شريك
     Route::delete('/offices/{id}', [RealEstateOfficeController::class, 'destroy']); // حذف مكتب شريك
+
+    // إدارة حسابات المدراء والشركاء
+    Route::get('/users', [UserController::class, 'index']);
+    Route::post('/users', [UserController::class, 'store']);
+    Route::patch('/users/{id}/status', [UserController::class, 'updateStatus']);
+    Route::delete('/users/{id}', [UserController::class, 'destroy']);
     });
 
 

@@ -12,6 +12,48 @@ use Illuminate\Support\Facades\DB;
 use App\Notifications\PropertyRequestStatusNotification;
 class PropertyController extends Controller
 {
+    // 0. تابع عرض العقارات حسب نطاق صلاحية المستخدم:
+    // - الآدمن (سوبر آدمن): يرى كافة عقارات النظام (تحكم شامل حسب المتطلبات).
+    // - الشريك (partner): يرى كافة عقارات مكتبه هو فقط (بغض النظر عمّن رفعها).
+    public function index(Request $request)
+    {
+        $user = $request->user();
+
+        $query = Property::with(['images', 'owner', 'office']);
+
+        if ($user->role === 'admin') {
+            if ($request->filled('office_id')) {
+                $query->where('office_id', $request->office_id);
+            }
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+            if ($request->filled('approval_status')) {
+                $query->where('approval_status', $request->approval_status);
+            }
+        } elseif ($user->role === 'partner') {
+            $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
+            if (!$office) {
+                return response()->json(['message' => 'أنت لست مديراً لأي مكتب حالياً'], 404);
+            }
+            $query->where('office_id', $office->id);
+        } else {
+            return response()->json(['message' => 'عذراً! هذه الصلاحية غير متاحة لك.'], 403);
+        }
+
+        $properties = $query->latest()->paginate($request->get('per_page', 20));
+
+        return response()->json([
+            'success' => true,
+            'properties' => $properties->items(),
+            'meta' => [
+                'current_page' => $properties->currentPage(),
+                'last_page' => $properties->lastPage(),
+                'total' => $properties->total(),
+            ],
+        ], 200);
+    }
+
     // 1. تابع إضافة عقار جديد
     public function store(Request $request)
     {
@@ -109,11 +151,12 @@ class PropertyController extends Controller
         // جلب المكتب الذي يديره المستخدم الحالي
         $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
 
-        // 🔒 قفل الأمان والخصوصية الجديد حسب طلبك:
+        // 🔒 قفل الأمان والخصوصية: الآدمن (سوبر آدمن) له صلاحية شاملة على كل عقارات النظام
+        $isAdmin = $user->role === 'admin';
         $isOwner = ($property->owner_id === $user->id); // هل هو صاحب العقار؟
         $isOfficeManagerAndAccepted = ($office && $property->office_id === $office->id && $property->approval_status === 'accepted'); // هل هو مدير المكتب والعقار مقبول؟
 
-        if (!$isOwner && !$isOfficeManagerAndAccepted) {
+        if (!$isAdmin && !$isOwner && !$isOfficeManagerAndAccepted) {
             return response()->json(['message' => 'عذراً! لا يمكنك تعديل هذا العقار إلا إذا كنت صاحبه أو أنه معروض ومقبول في مكتبك.'], 403);
         }
 
@@ -168,11 +211,12 @@ class PropertyController extends Controller
 
         $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
 
-        // 🔒 قفل الحذف حسب فكرتك بالظبط:
+        // 🔒 قفل الحذف: الآدمن (سوبر آدمن) له صلاحية شاملة على كل عقارات النظام
+        $isAdmin = $user->role === 'admin';
         $isOwner = ($property->owner_id === $user->id); // حذف عقاره الشخصي
         $isOfficeManagerAndAccepted = ($office && $property->office_id === $office->id && $property->approval_status === 'accepted'); // حذف عقار وافق عليه بمكتبه
 
-        if (!$isOwner && !$isOfficeManagerAndAccepted) {
+        if (!$isAdmin && !$isOwner && !$isOfficeManagerAndAccepted) {
             return response()->json(['message' => 'عذراً! لا يمكنك حذف هذا العقار إلا إذا كنت صاحبه أو قمت بقبوله مسبقاً في مكتبك.'], 403);
         }
 
@@ -188,7 +232,7 @@ class PropertyController extends Controller
         return response()->json(['message' => 'تم حذف العقار وكافة صوره من النظام بنجاح.'], 200);
     }
 
-    // 4. تابع جلب الطلبات المعلقة لمكتب المستخدم الحالي
+    // 4. تابع جلب الطلبات المعلقة: الآدمن يرى طلبات كل مكاتب النظام، الشريك يرى طلبات مكتبه هو فقط
     public function getPendingRequests(Request $request)
     {
         $user = $request->user();
@@ -197,17 +241,19 @@ class PropertyController extends Controller
             return response()->json(['message' => 'عذراً! هذه الصلاحية غير متاحة لك.'], 403);
         }
 
-        $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
+        $query = Property::with(['images', 'owner'])->where('approval_status', 'pending');
 
-        if (!$office) {
-            return response()->json(['message' => 'عذراً! حسابك غير مرتبط بإدارة أي مكتب عقاري حالياً.'], 404);
+        if ($user->role === 'partner') {
+            $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
+
+            if (!$office) {
+                return response()->json(['message' => 'عذراً! حسابك غير مرتبط بإدارة أي مكتب عقاري حالياً.'], 404);
+            }
+
+            $query->where('office_id', $office->id);
         }
 
-        $pendingProperties = Property::with(['images', 'owner'])
-            ->where('approval_status', 'pending')
-            ->where('office_id', $office->id) 
-            ->latest()
-            ->get();
+        $pendingProperties = $query->latest()->get();
 
         return response()->json(['properties' => $pendingProperties], 200);
     }
@@ -227,10 +273,13 @@ class PropertyController extends Controller
             return response()->json(['message' => 'العقار غير موجود'], 404);
         }
 
-        $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
+        // الآدمن (سوبر آدمن) يملك صلاحية مراجعة أي طلب في النظام؛ الشريك مقيّد بمكتبه فقط
+        if ($user->role === 'partner') {
+            $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
 
-        if (!$office || $property->office_id !== $office->id) {
-            return response()->json(['message' => 'عذراً! لا يمكنك مراجعة هذا العقار لأنه موجه لمكتب عقاري آخر.'], 403);
+            if (!$office || $property->office_id !== $office->id) {
+                return response()->json(['message' => 'عذراً! لا يمكنك مراجعة هذا العقار لأنه موجه لمكتب عقاري آخر.'], 403);
+            }
         }
 
         $validator = Validator::make($request->all(), [
@@ -303,14 +352,16 @@ public function updateStatus(Request $request, $id)
         ], 404);
     }
 
-    // 3. فحص الملكية: التأكد أن البارتنر/الآدمن يدير المكتب المسؤول عن هذا العقار
-    $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
+    // 3. فحص الملكية: الآدمن (سوبر آدمن) له صلاحية شاملة؛ الشريك مقيّد بالمكتب الذي يديره فقط
+    if ($user->role === 'partner') {
+        $office = \DB::table('real_estate_offices')->where('manager_id', $user->id)->first();
 
-    if (!$office || $property->office_id !== $office->id) {
-        return response()->json([
-            'success' => false,
-            'message' => 'عذراً! لا يمكنك تحديث حالة هذا العقار لأنه تابع لمكتب عقاري آخر أو لست مديراً له.'
-        ], 403);
+        if (!$office || $property->office_id !== $office->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'عذراً! لا يمكنك تحديث حالة هذا العقار لأنه تابع لمكتب عقاري آخر أو لست مديراً له.'
+            ], 403);
+        }
     }
 
     // 4. التحقق من المدخلات

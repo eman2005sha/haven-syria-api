@@ -42,8 +42,8 @@ class PublicPropertyController extends Controller
         $images = $property->images->map(function ($image) {
             return [
                 'id' => $image->id,
-                'url' => $image->image_path,
-            ];    
+                'url' => $image->image_url,
+            ];
         });
        
         // ========== معالجة الموقع (GPS) ==========
@@ -185,7 +185,7 @@ class PublicPropertyController extends Controller
                 
                 // 🌟 تحسين ناري: إرسال الصور للمطور في الـ Frontend عشان تظهر الكروت بصورها المصغرة
                 'images' => $property->images->map(function($img) {
-                    return ['id' => $img->id, 'url' => $img->image_path];
+                    return ['id' => $img->id, 'url' => $img->image_url];
                 }),
 
                 'office' => $property->office ? [
