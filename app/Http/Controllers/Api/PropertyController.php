@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Property;
 use App\Models\PropertyImage;
+use App\Models\RealEstateOffice;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
@@ -93,7 +94,7 @@ class PropertyController extends Controller
         if (in_array($user->role, ['admin', 'partner']) && $myOffice && $myOffice->id == $request->office_id) {
             $approvalStatus = 'accepted';
         }
-
+ $createdProperty = DB::transaction(function () use ($request, $user, $approvalStatus) {
         $property = Property::create([
             'title' => $request->title,
             'description' => $request->description,
@@ -123,14 +124,15 @@ class PropertyController extends Controller
                 ]);
             }
         }
-
-        $property->load('images');
+        return $property;
+});
+        $createdProperty->load('images');
         
         $message = ($approvalStatus === 'accepted') 
             ? 'تم إضافة العقار ونشره في مكتبك بنجاح تلقائي.' 
             : 'تم إرسال طلب إضافة العقار بنجاح وهو قيد المراجعة الآن من قبل المكتب المختار.';
 
-        return response()->json(['message' => $message, 'property' => $property], 201);
+        return response()->json(['message' => $message, 'property' => $createdProperty], 201);
     }
 
     // 2. تابع تعديل العقار
@@ -220,6 +222,8 @@ class PropertyController extends Controller
             return response()->json(['message' => 'عذراً! لا يمكنك حذف هذا العقار إلا إذا كنت صاحبه أو قمت بقبوله مسبقاً في مكتبك.'], 403);
         }
 
+        DB::transaction(function () use ($property) {
+
         // حذف الصور حقيقة من السيرفر
         foreach ($property->images as $image) {
             if (Storage::disk('public')->exists($image->image_path)) {
@@ -228,7 +232,7 @@ class PropertyController extends Controller
         }
 
         $property->delete();
-
+});
         return response()->json(['message' => 'تم حذف العقار وكافة صوره من النظام بنجاح.'], 200);
     }
 
