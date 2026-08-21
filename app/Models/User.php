@@ -22,6 +22,7 @@ use HasApiTokens, HasFactory, Notifiable;
         'role',
         'password',
         'is_active',
+       'email_verified_at', // <-- أضيفي هذا السطر هنا
     ];
    protected $hidden = [
         'password',
