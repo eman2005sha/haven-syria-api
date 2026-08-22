@@ -18,13 +18,13 @@ return new class extends Migration
         $table->decimal('price_sp', 15, 2)->nullable(); // السعر بالليرة السورية
         $table->decimal('price_usd', 15, 2)->nullable(); // السعر بالدولار الأمريكي
 
-        $table->string('region'); // المنطقة والحي (مثال: مشروع دمر، المزة...)
+        $table->string('region')->index(); // المنطقة والحي (مثال: مشروع دمر، المزة...)
         
         // أنواع العقارات المطلوبة بالظبط
-        $table->enum('property_type', ['apartment', 'villa', 'land', 'farm', 'shop', 'office']); 
+        $table->enum('property_type', ['apartment', 'villa', 'land', 'farm', 'shop', 'office'])->index(); 
         
         // نوع العرض: بيع أو إيجار
-        $table->enum('offer_type', ['sale', 'rent']); 
+        $table->enum('offer_type', ['sale', 'rent'])->index(); 
         
         // تفاصيل الإيجار (nullable لأنها بتشتغل بس إذا كان العرض إيجار)
         $table->enum('rent_period', ['daily', 'weekly', 'monthly', 'yearly'])->nullable(); 
@@ -38,10 +38,10 @@ return new class extends Migration
         $table->integer('floor_number')->default(0); // رقم الطابق
         
         // حالة العقار في السوق
-        $table->enum('status', ['available', 'sold', 'rented'])->default('available'); 
+        $table->enum('status', ['available', 'sold', 'rented'])->default('available')->index(); 
         
         // متابعة حالة الطلب عند الإدارة (قيد المراجعة، مقبول، مرفوض مع السبب)
-        $table->enum('approval_status', ['pending', 'accepted', 'rejected'])->default('pending');
+        $table->enum('approval_status', ['pending', 'accepted', 'rejected'])->default('pending')->index();
         $table->text('rejection_reason')->nullable(); 
         
         // الموقع بالتفصيل وإحداثيات الخريطة
